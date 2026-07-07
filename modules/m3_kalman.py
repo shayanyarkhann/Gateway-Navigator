@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.integrate import solve_ivp
 from modules.m1_propagator import cr3bp_odes
 
 
@@ -33,8 +34,27 @@ class KalmanFilter:
         self.H = np.eye(6)  # we're assuming all 6 states are directly measurable
 
     def predict(self, dt):
+        # Extended Kalman filter: the MEAN is propagated through the true
+        # nonlinear dynamics (not the linearized F), while F is used ONLY to
+        # propagate the covariance. F = I + A*dt is a first-order-accurate
+        # approximation to the flow -- fine for covariance bookkeeping, but
+        # applying it directly to the mean (F @ x) reintroduces uncorrected
+        # linearization error every single step. Near the Moon, |A| can be
+        # several units, so that error compounds fast across many predict
+        # calls and blows up -- this was caught by testing the filter in
+        # closed loop on the real NRHO, not by the SHO sanity check (where
+        # the SHO dynamics are exactly linear, so F @ x was exact there).
         F = state_transition_matrix(self.x, dt, self.mu)
-        self.x = F @ self.x
+
+        # Note: deliberately NOT reusing m1_propagator.propagate() here -- that
+        # function is fixed at rtol=1e-12/atol=1e-14 for M1's periodicity
+        # validation, which is far tighter than a filter needs and is very
+        # expensive when called every predict() step in a long closed-loop
+        # run. rtol=1e-10 is still ~4 orders of magnitude better than the old
+        # F@x approximation while running fast enough for real-time filtering.
+        sol = solve_ivp(cr3bp_odes, [0, dt], self.x, args=(self.mu,),
+                         method='RK45', rtol=1e-10, atol=1e-12)
+        self.x = sol.y[:, -1]
         self.P = F @ self.P @ F.T + self.Q
         return self.x
 
@@ -47,7 +67,7 @@ class KalmanFilter:
         self.x = self.x + K @ innovation
         self.P = (np.eye(6) - K @ self.H) @ self.P
 
-        return self.x, innovation    
+        return self.x, innovation       
 
         
 
