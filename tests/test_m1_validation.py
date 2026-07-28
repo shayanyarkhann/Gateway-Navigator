@@ -1,13 +1,13 @@
-import sys
-import os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 
 import numpy as np
 from modules.m1_propagator import propagate, jacobi_constant
+from core.nrho_ics import GATEWAY_NRHO_PERIOD, GATEWAY_NRHO_X0
 
 # NRHO Initial Conditions (non-dimensional)
-X0 = [1.0170375034517611, 0.0, -0.1784174365278452, 0.0, -0.0921378916511874, 0.0]
-T_PERIOD = 1.4451252712711455
+
+X0 = GATEWAY_NRHO_X0
+T_PERIOD = GATEWAY_NRHO_PERIOD
 L_STAR = 384400    # km
 
 sol = propagate(X0, [0, T_PERIOD])

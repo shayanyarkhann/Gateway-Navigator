@@ -4,6 +4,16 @@ from scipy.linalg import solve_discrete_are
 from modules.m1_propagator import cr3bp_odes
 from modules.m3_kalman import numerical_jacobian
 
+from core.constants import L_STAR_KM, V_STAR_MS
+
+from core.constants import L_STAR_KM, V_STAR_MS
+
+_POS_TOL: float = 1.0 / L_STAR_KM      # 1 km
+_VEL_TOL: float = 0.1 / V_STAR_MS      # 0.1 m/s
+
+_POS_TOL: float = 1.0 / L_STAR_KM      # 1 km
+_VEL_TOL: float = 0.1 / V_STAR_MS      # 0.1 m/s
+
 
 def compute_true_stm(X0, dt, mu):
     """
@@ -85,6 +95,17 @@ class LQRController:
         self._K = None
         self._K_ref_state = None
 
+    def _gain_is_stale(self, x_ref):
+     if self._K is None:
+        return True
+
+     d = x_ref - self._K_ref_state
+
+     return (
+        np.linalg.norm(d[:3]) > _POS_TOL
+        or np.linalg.norm(d[3:]) > _VEL_TOL
+    )    
+
     def _gain_for(self, x_ref):
         """
         Recompute the LQR gain only if the reference state has moved enough to
@@ -92,9 +113,8 @@ class LQRController:
         the same orbital phase (apolune) every orbit, x_ref is nearly identical
         each time, so in practice this integrates the STM once and reuses it.
         """
-        if self._K is not None and np.linalg.norm(x_ref - self._K_ref_state) < 1e-3:
-            return self._K
-
+        if not self._gain_is_stale(x_ref):
+         return self._K
         _, Phi = compute_true_stm(x_ref, self.dt, self.mu)
         B = Phi[:, 3:6]
 

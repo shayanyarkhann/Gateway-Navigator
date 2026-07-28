@@ -1,12 +1,11 @@
-import sys, os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 
 import numpy as np
 from modules.m3_kalman import KalmanFilter
 
 np.random.seed(42)
 
-# simple harmonic oscillator: x'' = -k*x
+# simple harmonic oscillator: x'' = -k*x 
 # state = [position, velocity], known analytical solution
 k = 1.0
 dt = 0.01
@@ -18,7 +17,7 @@ def sho_true_state(t, x0=1.0, v0=0.0):
     v = -x0 * w * np.sin(w * t) + v0 * np.cos(w * t)
     return np.array([x, v])
 
-# build a minimal 2-state version just for this sanity check
+# build a minimal 2 state version just for this sanity check lol
 class SHOKalman:
     def __init__(self, x0, P0, Q, R):
         self.x = np.array(x0, dtype=float)
@@ -64,7 +63,7 @@ for i in range(steps):
 errors = np.array(errors)
 innovations = np.array(innovations)
 
-# check 1: does estimate converge close to truth after 50 steps
+# check 1: does estimate converge close to truth after 50 steps or else imma go boommmmmmm
 late_error = np.mean(errors[50:])
 print(f"Mean estimation error after step 50: {late_error:.4f}  (should be small, < 0.1)")
 

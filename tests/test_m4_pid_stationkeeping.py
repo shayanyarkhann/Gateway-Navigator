@@ -1,18 +1,19 @@
-import sys, os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 
 import numpy as np
 from modules.m1_propagator import propagate
 from modules.m4_pid import PIDController
 from core.closed_loop import run_closed_loop
 from core.delta_v import delta_v_budget
+from core.nrho_ics import GATEWAY_NRHO_PERIOD, GATEWAY_NRHO_X0
 
 MU = 0.012150584
 L_STAR = 384400  # km
 
 # Same NRHO IC/period validated in M1
-X0 = np.array([1.0170375034517611, 0.0, -0.1784174365278452, 0.0, -0.0921378916511874, 0.0])
-T_PERIOD = 1.4451252712711455
+
+X0 = GATEWAY_NRHO_X0
+T_PERIOD = GATEWAY_NRHO_PERIOD
 
 # A small insertion/nav error (~0.87 km in position, zero velocity error).
 # NRHOs are linearly UNSTABLE -- this tiny perturbation is enough to make the
@@ -43,7 +44,12 @@ uncontrolled_err_km = np.linalg.norm(
 ) * L_STAR
 
 # --- Controlled: PID station-keeping, once per orbit at apolune ---
-pid = PIDController(Kp=0.4, Ki=0.0, Kd=0.5, dt_maneuver=dt_maneuver)
+pid = PIDController(
+    Kp=0.6,
+    Ki=0.0,
+    Kd=0.7,
+    dt_maneuver=dt_maneuver
+)
 res = run_closed_loop(pid, X0_pert, T_PERIOD, T_total, dt_sample, dt_maneuver,
                        noise_level='MEDIUM', mu=MU, seed=1)
 

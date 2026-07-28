@@ -19,7 +19,47 @@ Gateway Navigator models spacecraft dynamics in the Circular Restricted Three-Bo
 - Matplotlib
 
 ## Project Status
-In active development — Milestone 1 (NRHO propagation) in progress.
+Current Status
+done:
+Module 1 — NRHO Propagation
+Module 2 — Sensor and Actuator Noise
+Module 3 — Extended Kalman Filter
+Module 4 — PID Station-Keeping Controller
+Module 5 — LQR Station-Keeping Controller
+
+🚧 Module 6 — Controller Comparison and Monte Carlo Evaluation (in progress)
 
 ## Author
 Shayan yar khan
+Tested with Python 3.13
+
+## Installation
+
+Clone the repository
+
+```bash
+git clone https://github.com/yourname/Gateway-Navigator.git
+cd Gateway-Navigator
+```
+
+Install dependencies
+
+```bash
+pip install -e .
+```
+## Running
+
+Run the Module 1 validation
+
+```bash
+pytest tests/test_m1_validation.py
+```
+
+Run the complete test suite
+
+```bash
+pytest
+```
+The main research question:Which station-keeping strategy provides the best balance of orbital accuracy and propellant consumption for NASA Gateway Near Rectilinear Halo Orbit operations under realistic navigation uncertainty?
+
+This repository accompanies the Gateway Navigator Engineering Companion and the associated research paper describing the development and evaluation of autonomous station-keeping algorithms for the NASA Gateway NRHO.

@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gateway-navigator"
+version = "0.5.0"
+requires-python = ">=3.10"
+
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "matplotlib>=3.7",
+    "pandas>=2.0"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1"
+]
+
+dash = [
+    "plotly>=5.0",
+    "dash>=2.14"
+]
+
+[tool.setuptools]
+packages = ["core", "modules"]
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+disallow_untyped_defs = true
+files = ["core", "modules"]

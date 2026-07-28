@@ -1,19 +1,20 @@
-import sys, os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 
 import numpy as np
 from modules.m1_propagator import propagate
 from modules.m5_lqr import LQRController
 from core.closed_loop import run_closed_loop
 from core.delta_v import delta_v_budget
+from core.nrho_ics import GATEWAY_NRHO_PERIOD, GATEWAY_NRHO_X0
 
 MU = 0.012150584
 L_STAR = 384400  # km
 
 # Same NRHO IC/period validated in M1, same perturbation and cadence as M4
 # (identical setup lets the PID and LQR results be compared apples-to-apples).
-X0 = np.array([1.0170375034517611, 0.0, -0.1784174365278452, 0.0, -0.0921378916511874, 0.0])
-T_PERIOD = 1.4451252712711455
+
+X0 = GATEWAY_NRHO_X0
+T_PERIOD = GATEWAY_NRHO_PERIOD
 
 np.random.seed(1)
 pert = np.array([0.5 / L_STAR, 0.5 / L_STAR, 0.5 / L_STAR, 0, 0, 0])

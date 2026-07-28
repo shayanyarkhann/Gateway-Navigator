@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.integrate import solve_ivp
 from modules.m1_propagator import cr3bp_odes
-
+from numpy.typing import ArrayLike, NDArray
 
 def numerical_jacobian(X, mu, eps=1e-7):
     # finite-difference approximation of the 6x6 system Jacobian
@@ -57,18 +57,77 @@ class KalmanFilter:
         self.x = sol.y[:, -1]
         self.P = F @ self.P @ F.T + self.Q
         return self.x
+    def apply_maneuver(
+        self,
+        dv_cmd: ArrayLike,
+        sigma_thr: float = 0.02,
+    ) -> None:
+        """Fold a commanded burn into the estimate, inflating covariance for execution error.
 
-    def update(self, z):
-        # z is the noisy measurement coming in from m2_noise
+        The filter knows what it *commanded*, not what the thrusters actually
+        delivered, so the mean shifts by ``dv_cmd`` while the velocity block of
+        the covariance grows by the execution-error covariance
+        ``diag((sigma_thr * dv_cmd)^2)``. Omitting this inflation leaves the
+        filter overconfident immediately after every maneuver (GN-004).
+
+        Parameters
+        ----------
+        dv_cmd
+            Three-element commanded velocity increment, non-dimensional.
+        sigma_thr
+            Multiplicative 1-sigma thruster execution error. Must match the
+            value used by ``inject_thruster_error``.
+        """
+        dv_cmd = np.asarray(dv_cmd, dtype=float)
+        if dv_cmd.shape != (3,):
+            raise ValueError(f"expected a 3-element dv, got shape {dv_cmd.shape}")
+        if sigma_thr < 0.0:
+            raise ValueError(f"sigma_thr must be non-negative, got {sigma_thr}")
+
+        self.x[3:6] += dv_cmd
+        self.P[3:6, 3:6] += np.diag((sigma_thr * dv_cmd) ** 2)
+        self.P = 0.5 * (self.P + self.P.T)
+    def update(
+        self,
+        z: ArrayLike,
+    ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        """Correct the estimate with measurement ``z``.
+
+        Uses the Joseph-form covariance update, which stays symmetric and
+        positive semi-definite for *any* gain rather than only the exactly
+        optimal one, and solves the innovation system instead of forming
+        ``inv(S)`` explicitly.
+
+        Returns
+        -------
+        x, innovation
+            Updated estimate and the measurement residual. The innovation is
+            returned so callers can run whiteness and NEES diagnostics.
+
+        Raises
+        ------
+        ValueError
+            If ``z`` is not a 6-element measurement.
+        numpy.linalg.LinAlgError
+            If the innovation covariance is singular.
+        """
+        z = np.asarray(z, dtype=float)
+        if z.shape != (6,):
+            raise ValueError(f"expected a 6-element measurement, got shape {z.shape}")
+
         S = self.H @ self.P @ self.H.T + self.R
-        K = self.P @ self.H.T @ np.linalg.inv(S)
+        # K = P H^T S^-1, obtained as the solution of S^T K^T = (P H^T)^T
+        K = np.linalg.solve(S.T, (self.P @ self.H.T).T).T
 
         innovation = z - self.H @ self.x
         self.x = self.x + K @ innovation
-        self.P = (np.eye(6) - K @ self.H) @ self.P
 
-        return self.x, innovation       
+        # Joseph form: P = (I - KH) P (I - KH)^T + K R K^T
+        IKH = np.eye(6) - K @ self.H
+        self.P = IKH @ self.P @ IKH.T + K @ self.R @ K.T
+        self.P = 0.5 * (self.P + self.P.T)
 
+        return self.x, innovation
         
 
 
