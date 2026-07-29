@@ -32,7 +32,8 @@ def process_noise(dt: float, q_accel: float) -> NDArray[np.float64]:
 
 def run_closed_loop(controller, X0, T_period, T_total, dt_sample, dt_maneuver,
                      noise_level='MEDIUM', mu=0.012150584, P0_scale=1e-8,
-                     seed=None):
+                     seed=None, initial_dispersion=None, fault=None,
+                     q_accel=1e-16):
     """
     Simulate closed-loop NRHO station-keeping: truth propagation -> noisy
     sensing -> Kalman estimation -> periodic controller correction.
@@ -74,14 +75,20 @@ def run_closed_loop(controller, X0, T_period, T_total, dt_sample, dt_maneuver,
         f"dt_sample ({dt_sample}); got ratio "
         f"{dt_maneuver / dt_sample:.6f}"
     )
+    X_ref0 = np.array(X0, dtype=float)
+
     # Reference trajectory: propagate once with dense output, then sample it
-    # modulo the period since the NRHO is (near-)periodic by construction.
-    ref_sol = propagate(X0, [0, T_period], method='DOP853')
+    # modulo the period since the NRHO is periodic to sub-millimetre closure.
+    ref_sol = propagate(X_ref0, [0, T_period], method='DOP853')
 
     def x_ref_at(t):
         return ref_sol.sol(t % T_period)
 
-    X_true = np.array(X0, dtype=float)
+    X_true = X_ref0.copy()
+    if initial_dispersion is not None:
+        X_true = X_true + np.asarray(initial_dispersion, dtype=float)
+
+    maneuver_index = 0
 
     # Process noise: small and non-zero -- the dynamics model is very accurate
     # (validated to 1e-12 in M1) but never treated as exact.
@@ -94,7 +101,9 @@ def run_closed_loop(controller, X0, T_period, T_total, dt_sample, dt_maneuver,
         [NOISE_LEVELS[noise_level]['sigma_vel'] ** 2] * 3
     )
     P0 = np.eye(6) * P0_scale
-    kf = KalmanFilter(X0=X_true, P0=P0, Q=Q_kf, R=R_kf, mu=mu)
+    # The filter is initialised on the *reference*, not on the dispersed truth:
+    # a real navigation system does not know its injection error.
+    kf = KalmanFilter(X0=X_ref0.copy(), P0=P0, Q=Q_kf, R=R_kf, mu=mu)
 
     n_steps = round(T_total / dt_sample)
 
@@ -122,9 +131,11 @@ def run_closed_loop(controller, X0, T_period, T_total, dt_sample, dt_maneuver,
             x_ref_now = x_ref_at(t)
             dv_cmd = controller.compute_dv(x_hat, x_ref_now, t)
             dv_actual = inject_thruster_error(
-    dv_cmd,
-    rng=streams["thruster"],
-)
+                dv_cmd, rng=streams["thruster"],
+            )
+            if fault is not None and fault.applies_to(maneuver_index):
+                dv_actual = fault.apply(dv_actual)
+            maneuver_index += 1
 
             X_true = apply_delta_v(X_true, dv_actual)   # spacecraft feels the real burn
             kf.apply_maneuver(dv_cmd)
@@ -143,4 +154,4 @@ def run_closed_loop(controller, X0, T_period, T_total, dt_sample, dt_maneuver,
         'X_est': np.array(X_est_hist),
         'X_ref': np.array(X_ref_hist),
         'dv_history': np.array(dv_hist),
-    } 
+    }

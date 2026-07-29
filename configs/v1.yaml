@@ -1,0 +1,63 @@
+# Gateway Navigator -- Version 1 campaign configuration
+# Governed by RMS v1.0 (GNS-1). Every scientific parameter lives here.
+# Changing a value here is a campaign change; changing methodology requires an
+# RMS version bump (RMS preamble, Appendix C).
+
+name: v1-main
+
+orbit:
+  # RMS Appendix A's four anchors (period band, Jacobi constant, perilune,
+  # apolune) are mutually inconsistent in the CR3BP -- no single member matches
+  # all four. DOCUMENTED DEVIATION: we anchor on the 9:2 synodic resonance,
+  # because that is the orbit's defining property and the one named in the RMS
+  # research question, and because it best matches the published perilune
+  # radius (3250 km vs ~3200 km). Resulting Jacobi constant is 3.04649 against
+  # a tabulated ~3.0498; the tabulation is convention-dependent. Closing RMS
+  # 5.3 to digits requires Lee (2019).
+  # Alternatives: jacobi_3p0498 | period_6p50
+  anchor: nine_two_period
+  closure_tolerance_m: 1.0
+
+scaffold:
+  revolutions: 56                 # ~1 year at ~6.5 d (RMS 6.6)
+  samples_per_revolution: 15
+  maneuvers_per_revolution: 1     # RMS 6.1 -- fixed
+  maneuver_at_apolune: true       # RMS 6.1(4) -- fixed
+  p0_scale: 1.0e-8
+  q_accel: 1.0e-16
+
+dispersion:
+  position_sigma_km: 0.5
+  velocity_sigma_ms: 0.0
+
+fault:
+  enabled: false                  # the fault campaign runs from configs/v1-fault.yaml
+  severity_range: [0.0, 0.5]      # retained thrust fraction
+  epoch_revolution_range: [10, 46]
+
+monte_carlo:
+  trials: 500                     # RMS 6.6 minimum
+  base_seed: 20260707
+  bit_generator: PCG64            # RMS 6.7 -- pinned
+  convergence_check_points: 10
+  noise_levels: [LOW, MEDIUM, HIGH]
+
+sweeps:
+  # Symmetric effort: five settings per policy (RMS 6.9(4))
+  pid_kp: [0.1, 0.2, 0.4, 0.8, 1.2]
+  pid_ki: 0.02
+  pid_kd_ratio: 1.25
+  lqr_r_scale: [0.1, 1.0, 10.0, 100.0, 1000.0]
+  targeting_coast_revs: [1, 2, 3, 4, 5]
+
+stats:
+  bootstrap_resamples: 10000
+  confidence_level: 0.95
+  percentiles: [50.0, 95.0, 99.0]
+
+outputs:
+  results_dir: data/results
+  trials_dir: data/trials
+  figures_dir: figures
+  figure_format: pdf
+  figure_dpi: 300

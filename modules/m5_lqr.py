@@ -2,11 +2,9 @@ import numpy as np
 from scipy.integrate import solve_ivp
 from scipy.linalg import solve_discrete_are
 from modules.m1_propagator import cr3bp_odes
-from modules.m3_kalman import numerical_jacobian
 
 from core.constants import L_STAR_KM, V_STAR_MS
-
-from core.constants import L_STAR_KM, V_STAR_MS
+from core.dynamics import state_transition_matrix
 
 _POS_TOL: float = 1.0 / L_STAR_KM      # 1 km
 _VEL_TOL: float = 0.1 / V_STAR_MS      # 0.1 m/s
@@ -15,48 +13,6 @@ _POS_TOL: float = 1.0 / L_STAR_KM      # 1 km
 _VEL_TOL: float = 0.1 / V_STAR_MS      # 0.1 m/s
 
 
-def compute_true_stm(X0, dt, mu):
-    """
-    Numerically integrate the CR3BP state AND its 6x6 state transition matrix
-    (STM) together via the variational equations:
-
-        dX/dt   = f(X)
-        dPhi/dt = A(X(t)) @ Phi,      Phi(0) = I_6
-
-    This is the RIGOROUS linearization needed for control design over a long
-    interval (a full orbital period, in our case). The single-step Euler
-    approximation F = I + A*dt used in m3_kalman.py's state_transition_matrix
-    is only first-order accurate and is fine for the Kalman filter's SHORT
-    sensor-sampling steps (dt ~ T_period/15) -- but over a FULL period, A*dt
-    is order ~2-3 and that approximation is no longer trustworthy. Reusing it
-    here for the LQR's much longer maneuver interval gave visibly worse
-    control performance during tuning, which is what motivated writing this
-    proper variational-equations version instead.
-
-    Parameters:
-        X0 : array-like, shape (6,) -- state to linearize about
-        dt : float -- interval to propagate (here, one maneuver period)
-        mu : float -- CR3BP mass parameter
-
-    Returns:
-        X_end   : np.array, shape (6,)   -- nonlinear end state
-        Phi_end : np.array, shape (6,6)  -- true state transition matrix over dt
-    """
-    def augmented_odes(t, y, mu):
-        X = y[:6]
-        Phi = y[6:].reshape(6, 6)
-        dX = np.array(cr3bp_odes(t, X, mu))
-        A = numerical_jacobian(X, mu)
-        dPhi = A @ Phi
-        return np.concatenate([dX, dPhi.flatten()])
-
-    y0 = np.concatenate([np.asarray(X0, dtype=float), np.eye(6).flatten()])
-    sol = solve_ivp(augmented_odes, [0, dt], y0, args=(mu,),
-                     method='DOP853', rtol=1e-10, atol=1e-12)
-
-    X_end = sol.y[:6, -1]
-    Phi_end = sol.y[6:, -1].reshape(6, 6)
-    return X_end, Phi_end
 
 
 class LQRController:
@@ -65,7 +21,7 @@ class LQRController:
 
     Formulation: over one maneuver interval dt_maneuver, the CR3BP dynamics
     are linearized about the reference trajectory using the TRUE state
-    transition matrix (from compute_true_stm, i.e. the properly integrated
+    transition matrix (from core.dynamics.state_transition_matrix, i.e. the properly integrated
     variational equations -- not the short-step Euler approximation used in
     the Kalman filter, which is not valid over an interval this long).
 
@@ -115,7 +71,7 @@ class LQRController:
         """
         if not self._gain_is_stale(x_ref):
          return self._K
-        _, Phi = compute_true_stm(x_ref, self.dt, self.mu)
+        _, Phi = state_transition_matrix(x_ref, self.dt, self.mu)
         B = Phi[:, 3:6]
 
         P = solve_discrete_are(Phi, B, self.Q, self.R)
@@ -142,4 +98,4 @@ class LQRController:
 
         K = self._gain_for(x_ref)
         error = x_hat - x_ref
-        return -K @ error 
+        return -K @ error

@@ -129,3 +129,49 @@ def _cr3bp_rhs(t, X, mu):  # local import shim -- see note in GN-022
     from modules.m1_propagator import cr3bp_odes
     return cr3bp_odes(t, X, mu)
     
+
+def correct_to_jacobi(guess: ArrayLike, target_C: float, mu: float = MU
+                      ) -> tuple[NDArray[np.float64], float]:
+    """Correct onto the periodic NRHO with a specified Jacobi constant.
+
+    Alternative family-selection constraint to :func:`correct_nrho`, which
+    pins the period instead. RMS Appendix A gives both a period band and a
+    Jacobi constant; they select *different* members in the CR3BP, so which
+    one anchors the reference orbit is a recorded configuration choice.
+    """
+    from modules.m1_propagator import jacobi_constant
+
+    def _residuals(p: NDArray[np.float64]) -> list[float]:
+        X0 = np.array([p[0], 0.0, p[1], 0.0, p[2], 0.0])
+        _, X_half = _next_plane_crossing(X0, mu)
+        return [X_half[3], X_half[5], jacobi_constant(X0, mu) - target_C]
+
+    p_sol, _, ier, msg = fsolve(_residuals, np.asarray(guess, dtype=float),
+                                full_output=True, xtol=1e-13)
+    if ier != 1:
+        raise RuntimeError(f"Jacobi-anchored corrector did not converge: {msg.strip()}")
+    X0 = np.array([p_sol[0], 0.0, p_sol[1], 0.0, p_sol[2], 0.0])
+    t_half, _ = _next_plane_crossing(X0, mu)
+    return X0, 2.0 * t_half
+
+
+def resolve_orbit(anchor: str, mu: float = MU) -> tuple[NDArray[np.float64], float]:
+    """Resolve a configured orbit anchor to corrected initial conditions.
+
+    The single entry point by which the campaign obtains its reference orbit,
+    so that no module hardcodes a state vector (RMS Appendix C).
+
+    Raises
+    ------
+    ValueError
+        If ``anchor`` is not a known anchor name.
+    """
+    from core.config import ORBIT_ANCHORS
+
+    if anchor not in ORBIT_ANCHORS:
+        raise ValueError(f"unknown orbit anchor {anchor!r}")
+    spec = ORBIT_ANCHORS[anchor]
+    if spec["kind"] == "jacobi":
+        return correct_to_jacobi(spec["guess"], spec["target"], mu)
+    target = spec["target"] if spec["target"] is not None else NRHO_92_PERIOD
+    return correct_nrho(spec["guess"], target, mu)
